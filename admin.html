@@ -4,6 +4,8 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <meta name="robots" content="noindex,nofollow">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; img-src 'self' data: blob: https://dgzakcwgfxwudkejtviv.supabase.co https://wildhunk.com https://*.wildhunk.com https://makinforu.github.io; media-src 'self' blob:; connect-src 'self' https://dgzakcwgfxwudkejtviv.supabase.co wss://dgzakcwgfxwudkejtviv.supabase.co; object-src 'none'; base-uri 'self'; form-action 'self'">
+<meta name="referrer" content="strict-origin-when-cross-origin">
 <title>Wild hunk Admin</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Jost:wght@300;400;500;600&display=swap" rel="stylesheet">
@@ -102,6 +104,8 @@ td .th{width:46px;height:56px;object-fit:cover;background:#eee6db;display:block}
 .media .m img{width:100%;aspect-ratio:4/5;object-fit:cover;display:block;background:#eee6db}
 .media .m div{padding:7px 8px;font-size:12px;display:flex;gap:6px;justify-content:space-between;align-items:center}
 .media .m span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.pwm{position:fixed;inset:0;z-index:60;background:rgba(15,11,9,.6);display:grid;place-items:center;padding:16px}.pwm form{background:var(--card);padding:24px;width:min(400px,100%);display:grid;gap:12px}.pwm h3{margin:0}.pwm input{width:100%;padding:10px;border:1px solid var(--line);font:inherit}.pwm .acts{display:flex;gap:10px;justify-content:flex-end}
+.pwwarn{background:#fbeee0;border:1px solid #e7c9a4;padding:12px 16px;margin:0 0 16px;display:flex;gap:12px;align-items:center;justify-content:space-between;flex-wrap:wrap}
 .toast{position:fixed;bottom:22px;left:50%;transform:translateX(-50%) translateY(20px);background:var(--ink);color:#fff;padding:10px 18px;opacity:0;transition:.25s;z-index:50;pointer-events:none;max-width:90vw}
 .toast.on{opacity:1;transform:translateX(-50%)}
 .toast.err{background:var(--bad)}
@@ -177,7 +181,7 @@ td .th{width:46px;height:56px;object-fit:cover;background:#eee6db;display:block}
       <button data-v="media">Image library</button>
       <button data-v="admins">Admins</button>
     </nav>
-    <div class="me"><span id="meEmail"></span><br><button data-signout>Sign out</button></div>
+    <div class="me"><span id="meEmail"></span><br><button id="pwBtn" type="button">Change password</button> <button data-signout>Sign out</button></div>
   </aside>
   <div>
     <div class="mobilebar"><span class="logo" style="color:#fff">wild<span>hunk</span></span><button id="menuBtn">Menu</button></div>
@@ -217,11 +221,31 @@ function setMode(m){mode=m;$('#authMsg').textContent='';$('#authMsg').className=
   $('#aPass').autocomplete=m==='up'?'new-password':'current-password';
   $('#toSignup').textContent=m==='in'?'Create the owner account':'Back to sign in';
 }
+function lsGet(k){try{return JSON.parse(localStorage.getItem(k)||'null')}catch(e){return null}}
+function lsSet(k,v){try{localStorage.setItem(k,JSON.stringify(v))}catch(e){}}
+function lockLeft(){var f=lsGet('wh_fail')||{n:0,until:0};return Math.max(0,Math.ceil((f.until-Date.now())/1000))}
+function failBump(){var f=lsGet('wh_fail')||{n:0,until:0};f.n++;if(f.n>=5){f.until=Date.now()+Math.min(15*60e3,60e3*Math.pow(2,f.n-5));}lsSet('wh_fail',f)}
+function failReset(){lsSet('wh_fail',{n:0,until:0})}
+function pwDialog(){var m=document.createElement('div');m.className='pwm';
+  m.innerHTML='<form><h3>Change password</h3><p class="hint" style="margin:0">Use at least 10 characters with letters, numbers and a symbol.</p><input type="password" id="pw1" placeholder="New password" autocomplete="new-password" required minlength="10"><input type="password" id="pw2" placeholder="Type it again" autocomplete="new-password" required minlength="10"><p class="msg" id="pwMsg"></p><div class="acts"><button type="button" class="btn ghost" data-x>Cancel</button><button class="btn">Save password</button></div></form>';
+  document.body.appendChild(m);var f=m.querySelector('form'),msg=m.querySelector('#pwMsg');m.querySelector('[data-x]').onclick=function(){m.remove()};
+  f.onsubmit=async function(e){e.preventDefault();var a=m.querySelector('#pw1').value,b=m.querySelector('#pw2').value;msg.className='msg err';
+    if(a!==b)return msg.textContent='The two passwords do not match.';
+    if(a.length<10||!/[a-z]/i.test(a)||!/[0-9]/.test(a)||!/[^a-z0-9]/i.test(a))return msg.textContent='Use at least 10 characters with letters, numbers and a symbol.';
+    if(/admin@?123|password|wildhunk/i.test(a))return msg.textContent='That password is too easy to guess.';
+    msg.className='msg';msg.textContent='Saving…';
+    var r=await sb.auth.updateUser({password:a,data:{pw_set:true}});
+    if(r.error){msg.className='msg err';msg.textContent=r.error.message;return}
+    m.remove();var w=document.getElementById('pwWarn');if(w)w.remove();toast('Password changed. Use it next time you sign in.')}}
+$('#pwBtn').onclick=pwDialog;
+function pwNudge(){if(user&&user.user_metadata&&user.user_metadata.pw_set)return;if(document.getElementById('pwWarn'))return;
+  var d=document.createElement('div');d.className='pwwarn';d.id='pwWarn';d.innerHTML='<span><b>You are still on the starter password.</b> Anyone who guesses it can change your store. Set a stronger one now.</span><button class="btn" type="button">Change password</button>';
+  d.querySelector('button').onclick=pwDialog;var mn=$('#main');mn.parentNode.insertBefore(d,mn)}
 $('#toSignup').onclick=function(){setMode(mode==='in'?'up':'in')};
 $('#toReset').onclick=function(){setMode('reset')};
-$('#authForm').onsubmit=async function(e){e.preventDefault();var em=$('#aEmail').value.trim().toLowerCase();if(em.indexOf('@')<0)em+='@wildhunk.com';var pw=$('#aPass').value,msg=$('#authMsg');msg.className='msg';msg.textContent='Please wait…';
+$('#authForm').onsubmit=async function(e){e.preventDefault();var em=$('#aEmail').value.trim().toLowerCase();if(em.indexOf('@')<0)em+='@wildhunk.com';var pw=$('#aPass').value,msg=$('#authMsg');var lk=lockLeft();if(lk>0){msg.className='msg err';msg.textContent='Too many failed attempts. Try again in '+lk+' seconds.';return}msg.className='msg';msg.textContent='Please wait…';
   try{
-    if(mode==='in'){var r=await sb.auth.signInWithPassword({email:em,password:pw});if(r.error)throw r.error}
+    if(mode==='in'){var r=await sb.auth.signInWithPassword({email:em,password:pw});if(r.error){failBump();throw new Error(/invalid/i.test(r.error.message)?'Wrong username or password.':r.error.message)}failReset()}
     else if(mode==='up'){var r2=await sb.auth.signUp({email:em,password:pw,options:{emailRedirectTo:location.href.split('#')[0]}});if(r2.error)throw r2.error;
       if(!r2.data.session){msg.className='msg ok';msg.textContent='Check your inbox and click the confirmation link, then sign in here.';return}}
     else{var r3=await sb.auth.resetPasswordForEmail(em,{redirectTo:location.href.split('#')[0]});if(r3.error)throw r3.error;msg.className='msg ok';msg.textContent='Reset link sent. Check your inbox.';return}
@@ -240,7 +264,7 @@ async function boot(){
     if(st.data.has_admin){$('#claimTitle').textContent='No admin access';$('#claimText').textContent='You are signed in as '+user.email+', but this account is not a store admin. Ask the store owner to add you under Admins.';$('#claimBtn').classList.add('hidden')}
     else{$('#claimBtn').classList.remove('hidden')}
     return}
-  $('#meEmail').textContent=user.email;showOnly('appView');await loadSettings();go(location.hash.slice(1)||'dash');
+  $('#meEmail').textContent=user.email;showOnly('appView');pwNudge();await loadSettings();go(location.hash.slice(1)||'dash');
 }
 var booted=false,denied=false;
 sb.auth.onAuthStateChange(function(ev,session){
