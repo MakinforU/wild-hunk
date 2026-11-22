@@ -143,12 +143,12 @@ td .th{width:46px;height:56px;object-fit:cover;background:#eee6db;display:block}
     <h1 id="authTitle">Admin sign in</h1>
     <p id="authSub">Only store admins can open this panel.</p>
     <form id="authForm">
-      <label>Email<input type="email" id="aEmail" required autocomplete="username"></label>
-      <label id="pwWrap">Password<input type="password" id="aPass" required minlength="8" autocomplete="current-password"></label>
+      <label>Username<input type="text" id="aEmail" required autocomplete="username" autocapitalize="none" spellcheck="false"></label>
+      <label id="pwWrap">Password<input type="password" id="aPass" required autocomplete="current-password"></label>
       <button class="btn" style="width:100%" id="authBtn">Sign in</button>
     </form>
     <div class="msg" id="authMsg"></div>
-    <p style="margin:14px 0 0;font-size:13px"><button class="linkbtn" id="toSignup">Create the owner account</button> · <button class="linkbtn" id="toReset">Forgot password</button></p>
+    <p class="hint" style="margin:14px 0 0;font-size:13px">Admin access only. Ask the store owner if you need to sign in.</p><span hidden><button id="toSignup"></button><button id="toReset"></button></span>
   </div>
 </div>
 
@@ -219,7 +219,7 @@ function setMode(m){mode=m;$('#authMsg').textContent='';$('#authMsg').className=
 }
 $('#toSignup').onclick=function(){setMode(mode==='in'?'up':'in')};
 $('#toReset').onclick=function(){setMode('reset')};
-$('#authForm').onsubmit=async function(e){e.preventDefault();var em=$('#aEmail').value.trim(),pw=$('#aPass').value,msg=$('#authMsg');msg.className='msg';msg.textContent='Please wait…';
+$('#authForm').onsubmit=async function(e){e.preventDefault();var em=$('#aEmail').value.trim().toLowerCase();if(em.indexOf('@')<0)em+='@wildhunk.com';var pw=$('#aPass').value,msg=$('#authMsg');msg.className='msg';msg.textContent='Please wait…';
   try{
     if(mode==='in'){var r=await sb.auth.signInWithPassword({email:em,password:pw});if(r.error)throw r.error}
     else if(mode==='up'){var r2=await sb.auth.signUp({email:em,password:pw,options:{emailRedirectTo:location.href.split('#')[0]}});if(r2.error)throw r2.error;
@@ -233,15 +233,16 @@ $('#claimBtn').onclick=async function(){var r=await sb.rpc('wh_claim_admin');if(
 
 async function boot(){
   var s=(await sb.auth.getSession()).data.session;user=s&&s.user;
-  if(!user){setMode('in');return showOnly('authView')}
+  if(!user){setMode('in');if(denied){denied=false;$('#authMsg').className='msg err';$('#authMsg').textContent='This account does not have admin access.'}return showOnly('authView')}
   var st=await sb.rpc('wh_admin_state');if(st.error){showOnly('authView');$('#authMsg').className='msg err';$('#authMsg').textContent=st.error.message;return}
-  if(!st.data.is_admin){showOnly('claimView');
+  if(!st.data.is_admin){denied=true;await sb.auth.signOut();return;
+    showOnly('claimView');
     if(st.data.has_admin){$('#claimTitle').textContent='No admin access';$('#claimText').textContent='You are signed in as '+user.email+', but this account is not a store admin. Ask the store owner to add you under Admins.';$('#claimBtn').classList.add('hidden')}
     else{$('#claimBtn').classList.remove('hidden')}
     return}
   $('#meEmail').textContent=user.email;showOnly('appView');await loadSettings();go(location.hash.slice(1)||'dash');
 }
-var booted=false;
+var booted=false,denied=false;
 sb.auth.onAuthStateChange(function(ev,session){
   if(ev==='PASSWORD_RECOVERY'){var np=prompt('Enter a new password (at least 8 characters)');if(np&&np.length>=8)sb.auth.updateUser({password:np}).then(function(r){toast(r.error?r.error.message:'Password updated',!!r.error)})}
   if(ev==='SIGNED_IN'||ev==='SIGNED_OUT'||!booted){booted=true;setTimeout(boot,0)}
