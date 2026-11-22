@@ -41,6 +41,10 @@ var CSS='.wz{position:fixed;inset:0;z-index:60;background:var(--bg,#f6f2ec);disp
 '.wz-v .ac{display:flex;gap:4px;padding:4px 8px 10px;flex-wrap:wrap}.wz-v .ac button{flex:1;font-size:11.5px;padding:5px 6px;border:1px solid var(--line,#e4dcd1);background:#fff;cursor:pointer;white-space:nowrap}'+
 '.wz-v .ac button:hover{border-color:var(--ink,#16110e)}.wz-v.chosen{outline:2px solid var(--accent,#a07a4f)}'+
 '.wz-ph{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;color:#fff;font-size:12px;text-align:center;padding:10px}.wz-ph b{font-size:13px;letter-spacing:.08em;text-transform:uppercase;font-weight:500}'+
+'.wz-src{display:flex;gap:10px;flex-wrap:wrap;margin:0 0 14px}@media (pointer:coarse){.wz-drop:not(.has){display:none}.wz-src .btn{padding:18px 16px;font-size:16px}}.wz-src .btn{flex:1;min-width:150px;display:inline-flex;align-items:center;justify-content:center;gap:8px;padding:13px 16px}'+
+'.wz-src svg{width:18px;height:18px;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linejoin:round;stroke-linecap:round}'+
+'.wz-camm{position:fixed;inset:0;z-index:70;background:rgba(15,11,9,.92);display:grid;place-items:center;padding:16px}.wz-cambox{width:min(720px,100%)}.wz-cambox video{width:100%;max-height:70vh;background:#000;display:block}'+
+'.wz-camacts{display:flex;gap:10px;justify-content:flex-end;margin-top:12px}.wz-camacts .btn.ghost{color:#fff;border-color:#fff}.wz-camacts .btn:not(.ghost){background:#fff;color:#16110e;border-color:#fff}'+
 '.wz-note{background:#fbf3e6;border-left:3px solid var(--accent,#a07a4f);padding:12px 14px;font-size:13.5px;margin:0 0 16px}'+
 '.wz-note.ok{background:#eaf3e7;border-color:#2f6b3d}'+
 '.wz-g2{display:grid;grid-template-columns:1fr 1fr;gap:0 16px}.wz-g3{display:grid;grid-template-columns:repeat(3,1fr);gap:0 16px}'+
@@ -93,16 +97,31 @@ function open(o){
   function read(){$$('[data-f]',body).forEach(function(i){var f=i.dataset.f;S[f]=i.type==='number'?+i.value:i.value})}
 
   // 1. Photo
-  function step0(){body.innerHTML='<h3>Start with one photo</h3><p class="wz-lead">A clear photo of the garment on a plain background works best. The AI uses it to make the other angles.</p>'+
-    '<div class="wz-drop" id="wz-drop">'+(S.photo?'<img src="'+esc(S.photo)+'" alt="Uploaded product photo">':'<div class="ph"><b>+</b>Drop a photo here or click to choose<br><small style="color:#6f655c">JPG, PNG or WebP, up to 8 MB</small></div>')+'</div>'+
-    (S.photo?'<p style="margin-top:10px"><button class="btn ghost sm" id="wz-repl">Use a different photo</button></p>':'');
+  function step0(){body.innerHTML='<h3>Start with one photo</h3><p class="wz-lead">Take a photo with your camera or upload one you already have. A clear, well-lit shot of the whole garment works best. The AI cleans up the background and makes the other angles.</p>'+
+    '<div class="wz-src"><button class="btn" id="wz-cam" type="button"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 8h3l2-3h6l2 3h3v11H4z"/><circle cx="12" cy="13" r="3.5"/></svg>'+(S.photo?'Retake photo':'Take photo')+'</button>'+
+    '<button class="btn ghost" id="wz-up" type="button"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 16V4m0 0-4 4m4-4 4 4M4 15v5h16v-5"/></svg>'+(S.photo?'Upload a different photo':'Upload photo')+'</button></div>'+
+    '<div class="wz-drop'+(S.photo?' has':'')+'" id="wz-drop">'+(S.photo?'<img src="'+esc(S.photo)+'" alt="Product photo">':'<div class="ph"><b>+</b>Drop a photo here<br><small style="color:#6f655c">JPG, PNG or WebP, up to 8 MB</small></div>')+'</div>';
     var d=$('#wz-drop',body);
-    function take(files){if(!files||!files.length)return;S.busy=true;d.innerHTML='<div class="ph">Uploading…</div>';
+    function take(files){if(!files||!files.length)return;d.innerHTML='<div class="ph">Uploading…</div>';
       api.upload([files[0]],'products').then(function(u){S.photo=u[0];S.uploaded.push(u[0]);S.views={};step0();navDraw()}).catch(function(e){api.toast(e.message||'Upload failed',true);step0()})}
-    function pick(){var i=document.createElement('input');i.type='file';i.accept='image/*';i.onchange=function(){take(i.files)};i.click()}
-    d.onclick=pick;if($('#wz-repl',body))$('#wz-repl',body).onclick=pick;
+    function pick(cam){var i=document.createElement('input');i.type='file';i.accept='image/*';if(cam)i.setAttribute('capture','environment');i.onchange=function(){take(i.files)};i.click()}
+    $('#wz-up',body).onclick=function(){pick(false)};
+    $('#wz-cam',body).onclick=function(){var touch=matchMedia('(pointer:coarse)').matches;
+      if(touch||!(navigator.mediaDevices&&navigator.mediaDevices.getUserMedia))return pick(true);
+      camera(function(f){take([f])},function(){pick(true)})};
+    d.onclick=function(){if(!S.photo)pick(false)};
     d.ondragover=function(e){e.preventDefault();d.classList.add('over')};d.ondragleave=function(){d.classList.remove('over')};
     d.ondrop=function(e){e.preventDefault();d.classList.remove('over');take(e.dataTransfer.files)}}
+  // Live camera for laptops and desktops (phones use their own camera app)
+  function camera(done,fallback){var m=document.createElement('div');m.className='wz-camm';
+    m.innerHTML='<div class="wz-cambox"><video playsinline autoplay muted></video><div class="wz-camacts"><button class="btn ghost" data-c="x" type="button">Cancel</button><button class="btn" data-c="snap" type="button">Capture</button></div></div>';
+    el.appendChild(m);var v=$('video',m),stream=null;
+    function stop(){if(stream)stream.getTracks().forEach(function(t){t.stop()});m.remove()}
+    navigator.mediaDevices.getUserMedia({video:{facingMode:'environment',width:{ideal:1920},height:{ideal:1440}},audio:false}).then(function(st){stream=st;v.srcObject=st})
+      .catch(function(){stop();api.toast('Camera not available. Choose a photo instead.',true);fallback()});
+    m.onclick=function(e){var b=e.target.closest('[data-c]');if(!b)return;if(b.dataset.c==='x')return stop();
+      if(!v.videoWidth)return;var c=document.createElement('canvas');c.width=v.videoWidth;c.height=v.videoHeight;c.getContext('2d').drawImage(v,0,0);
+      c.toBlob(function(bl){stop();if(bl)done(new File([bl],'camera-'+Date.now()+'.jpg',{type:'image/jpeg'}))},'image/jpeg',.92)}}
 
   // 2. AI views
   function step1(){
